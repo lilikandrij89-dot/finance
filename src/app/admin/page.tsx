@@ -18,7 +18,6 @@ import {
   Pencil,
   Play,
   Plus,
-  Radio,
   RotateCcw,
   ShoppingBag,
   SkipForward,
@@ -41,8 +40,12 @@ import {
   formatDelta,
   formatMoney,
   generateCsvReport,
+  generateStudentCsvReport,
+  generateStudentTsvTable,
+  getEvaluatedLotColumns,
   getLeaderboard,
   getRiskTierMeta,
+  getStudentSummaryRows,
 } from "@/lib/formatters";
 import {
   canAdvanceToRound,
@@ -98,12 +101,13 @@ export default function AdminPage() {
   const [previewLotId, setPreviewLotId] = useState<string | null>(null);
   const [autoRevealOnZero, setAutoRevealOnZero] = useState<boolean>(true);
   const [copiedInvite, setCopiedInvite] = useState<boolean>(false);
+  const [copiedStudentTable, setCopiedStudentTable] = useState<boolean>(false);
   const [renamingTeamId, setRenamingTeamId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState<string>("");
   const autoRevealedLotRef = useRef<string | null>(null);
   const autoAppliedSpinRef = useRef<number>(0);
 
-  const { state, connected, mode, busy, error, clockOffsetMs, dispatch } =
+  const { state, connected, busy, error, clockOffsetMs, dispatch } =
     useGameRoom(roomId);
   const { totalSeconds, isPaused } = useCountdown(
     state?.spotlight ?? null,
@@ -235,6 +239,30 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadStudentCsv = () => {
+    const csv = generateStudentCsvReport(state);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `fin-storm-students-round-${state.round}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const copyStudentTable = async () => {
+    const tsv = generateStudentTsvTable(state);
+    try {
+      await navigator.clipboard.writeText(tsv);
+      setCopiedStudentTable(true);
+      setTimeout(() => setCopiedStudentTable(false), 2500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const studentRows = getStudentSummaryRows(state);
+  const evaluatedLotCols = getEvaluatedLotColumns(state);
   const activeTeamIds = getActiveTeamIds(state.teams, state.players);
 
   return (
@@ -242,9 +270,30 @@ export default function AdminPage() {
       {/* TOP BAR */}
       <header className="surface-card mb-4 flex flex-wrap items-center justify-between gap-3 rounded-3xl px-5 py-3.5">
         <div>
-          <h1 className="font-display text-lg font-bold text-[#231710]">
-            Пульт викладача · /admin
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-lg font-bold text-[#231710]">
+              Пульт викладача
+            </h1>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                connected
+                  ? "bg-emerald-50 text-emerald-800"
+                  : "bg-rose-50 text-rose-800"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  connected ? "bg-emerald-600" : "bg-rose-600"
+                }`}
+              />
+              {connected ? "Онлайн" : "Офлайн"}
+            </span>
+            {roomId !== "default-room" && (
+              <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold text-orange-900">
+                Кімната: {roomId}
+              </span>
+            )}
+          </div>
           <div className="text-xs text-[#5E4636]">
             {roundMeta.title} · Завдань пройдено:{" "}
             <strong className="font-mono-num text-[#231710]">
@@ -262,10 +311,6 @@ export default function AdminPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 font-mono-num text-xs font-bold text-orange-900">
-            Кімната: {roomId}
-          </span>
-
           <button
             type="button"
             onClick={async () => {
@@ -289,19 +334,8 @@ export default function AdminPage() {
             ) : (
               <Copy className="h-3.5 w-3.5" />
             )}
-            {copiedInvite ? "Скопійовано" : "Копіювати /play"}
+            {copiedInvite ? "Посилання скопійовано" : "Посилання для студентів"}
           </button>
-
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold ${
-              connected
-                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                : "border-rose-300 bg-rose-50 text-rose-800"
-            }`}
-          >
-            <Radio className="h-3.5 w-3.5" />
-            {connected ? mode : "Офлайн"}
-          </span>
 
           <button
             type="button"
@@ -967,29 +1001,60 @@ export default function AdminPage() {
 
           {state.phase === "spotlight" && state.spotlight && spotlightLot && (
             <div className="surface-card space-y-3 rounded-3xl p-4">
-              <div className="text-xs font-bold text-orange-900">
-                Живий зріз голосів студентів (до розкриття):
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-bold text-orange-900">
+                  Живий зріз голосів команди «
+                  {state.teams[state.spotlight.buyerTeamId].shortName}»:
+                </div>
+                <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 font-mono-num text-[11px] font-bold text-orange-900">
+                  {Object.keys(state.spotlight.analystVotes).length}/
+                  {
+                    Object.values(state.players).filter(
+                      (p) => p.teamId === state.spotlight?.buyerTeamId
+                    ).length
+                  }
+                </span>
               </div>
               <div className="space-y-1.5 text-xs">
                 {Object.entries(state.spotlight.analystVotes).length === 0 ? (
                   <div className="text-[#826754]">
-                    Учасники ще обирають варіант…
+                    {spotlightLot.questionType === "open"
+                      ? "Відкрите питання — очікуйте усну відповідь команди."
+                      : "Учасники ще обирають варіант…"}
                   </div>
                 ) : (
                   Object.entries(state.spotlight.analystVotes).map(
-                    ([pid, ans]) => (
-                      <div
-                        key={pid}
-                        className="flex items-center justify-between rounded-xl border border-orange-100 bg-[#FFFBF7] px-3 py-2"
-                      >
-                        <span className="font-semibold text-[#231710]">
-                          {state.players[pid]?.name ?? pid}
-                        </span>
-                        <span className="font-mono-num font-bold text-orange-900">
-                          {formatReadableVote(spotlightLot, ans)}
-                        </span>
-                      </div>
-                    )
+                    ([pid, ans]) => {
+                      const voter = state.players[pid];
+                      const teamShort = voter
+                        ? state.teams[voter.teamId]?.shortName
+                        : null;
+                      const isFromBuyer =
+                        voter?.teamId === state.spotlight?.buyerTeamId;
+                      return (
+                        <div
+                          key={pid}
+                          className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                            isFromBuyer
+                              ? "border-orange-300 bg-orange-50/70"
+                              : "border-orange-100 bg-[#FFFBF7]"
+                          }`}
+                        >
+                          <span className="truncate font-semibold text-[#231710]">
+                            {voter?.name ?? pid}
+                            {teamShort && (
+                              <span className="ml-1.5 text-[11px] font-medium text-[#826754]">
+                                ({teamShort}
+                                {isFromBuyer ? " · актив" : ""})
+                              </span>
+                            )}
+                          </span>
+                          <span className="shrink-0 font-mono-num font-bold text-orange-900">
+                            {formatReadableVote(spotlightLot, ans)}
+                          </span>
+                        </div>
+                      );
+                    }
                   )
                 )}
               </div>
@@ -1293,6 +1358,132 @@ export default function AdminPage() {
           </div>
         </aside>
       </div>
+
+      {/* INDIVIDUAL STUDENT JOURNAL & COPYABLE TABLE */}
+      <section className="surface-card mt-4 rounded-3xl p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-base font-bold text-[#231710]">
+              Індивідуальний журнал відповідей студентів (тести та конструктори)
+            </h2>
+            <p className="text-xs text-[#5E4636]">
+              Фіксується голос кожного учасника тієї команди, яка купила
+              завдання (хто що обрав). Відкриті усні питання викладач оцінює
+              самостійно.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={copyStudentTable}
+              className="btn-press inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-orange-300 bg-orange-50 px-3.5 py-1.5 text-xs font-bold text-orange-950 hover:bg-orange-100"
+            >
+              {copiedStudentTable ? (
+                <Check className="h-3.5 w-3.5 text-emerald-700" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              {copiedStudentTable
+                ? "Таблицю скопійовано"
+                : "Копіювати таблицю (Excel / Sheets)"}
+            </button>
+            <button
+              type="button"
+              onClick={downloadStudentCsv}
+              className="btn-press inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
+            >
+              <Download className="h-3.5 w-3.5" /> CSV по студентах
+            </button>
+          </div>
+        </div>
+
+        {studentRows.length === 0 ? (
+          <div className="rounded-2xl border border-orange-100 bg-[#FFFBF7] px-4 py-6 text-center text-xs text-[#826754]">
+            Ще немає підключених студентів або зафіксованих відповідей.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-left text-xs">
+              <thead>
+                <tr className="border-b border-orange-200 text-[11px] font-bold text-[#826754]">
+                  <th className="py-2 pr-3">Студент</th>
+                  <th className="px-2 py-2">Команда</th>
+                  <th className="px-2 py-2 text-center">Точних / Всього</th>
+                  {evaluatedLotCols.map((col) => (
+                    <th
+                      key={col.lotId}
+                      className="px-2 py-2 text-center font-mono-num"
+                      title={`Тема ${col.topic}`}
+                    >
+                      {col.ticker}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-orange-100">
+                {studentRows.map((st) => (
+                  <tr key={st.playerId} className="hover:bg-orange-50/40">
+                    <td className="py-2 pr-3 font-bold text-[#231710]">
+                      {st.name}
+                      <span className="ml-1.5 text-[10px] font-medium text-[#826754]">
+                        ({st.roleLabel})
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 font-medium text-[#5E4636]">
+                      {st.teamName}
+                    </td>
+                    <td className="px-2 py-2 text-center font-mono-num font-extrabold text-[#231710]">
+                      {st.votedCount > 0 ? (
+                        <>
+                          {st.exactCount}/{st.votedCount}{" "}
+                          <span className="text-[11px] font-semibold text-orange-800">
+                            ({st.accuracyPct}%)
+                          </span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    {evaluatedLotCols.map((col) => {
+                      const rec = st.byLot[col.lotId];
+                      if (!rec) {
+                        return (
+                          <td
+                            key={col.lotId}
+                            className="px-2 py-2 text-center text-[#826754]"
+                          >
+                            —
+                          </td>
+                        );
+                      }
+                      const badgeCls = rec.isExact
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                        : rec.isPartial
+                        ? "border-amber-300 bg-amber-50 text-amber-800"
+                        : "border-rose-300 bg-rose-50 text-rose-800";
+                      const badgeText = rec.isExact
+                        ? "✓"
+                        : rec.isPartial
+                        ? `~${rec.correctCount}/${rec.totalCount}`
+                        : "✕";
+                      return (
+                        <td key={col.lotId} className="px-1.5 py-2 text-center">
+                          <span
+                            title={`${rec.ticker}: ${rec.answerSummary}`}
+                            className={`inline-block rounded-lg border px-2 py-0.5 font-mono-num text-[11px] font-bold ${badgeCls}`}
+                          >
+                            {badgeText} {rec.answerSummary}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

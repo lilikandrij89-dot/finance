@@ -18,6 +18,7 @@ interface QuestionConstructorProps {
   spotlight: SpotlightState;
   player: Player;
   teamPlayers: Player[];
+  voteMode?: "team" | "personal";
   busy?: boolean;
   onVote: (answer: AnswerPayload) => void;
   onSubmit: (answer: AnswerPayload) => void;
@@ -28,12 +29,16 @@ export function QuestionConstructor({
   spotlight,
   player,
   teamPlayers,
+  voteMode = "team",
   busy = false,
   onVote,
   onSubmit,
 }: QuestionConstructorProps) {
-  const isCaptain = player.role === "captain";
+  const isPersonal = voteMode === "personal";
+  const isCaptain = !isPersonal && player.role === "captain";
   const myExistingVote = spotlight.analystVotes[player.id];
+  const effectiveHiddenOptionIds = isPersonal ? [] : spotlight.hiddenOptionIds;
+  const effectiveRevealedPairIds = isPersonal ? [] : spotlight.revealedPairIds;
 
   const [singleId, setSingleId] = useState<string>("");
   const [multiIds, setMultiIds] = useState<string[]>([]);
@@ -64,22 +69,22 @@ export function QuestionConstructor({
 
   // Clear hidden options from current selection when 50/50 activates
   useEffect(() => {
-    if (spotlight.hiddenOptionIds.length === 0) return;
+    if (effectiveHiddenOptionIds.length === 0) return;
     setSingleId((prev) =>
-      spotlight.hiddenOptionIds.includes(prev) ? "" : prev
+      effectiveHiddenOptionIds.includes(prev) ? "" : prev
     );
     setMultiIds((prev) =>
-      prev.filter((id) => !spotlight.hiddenOptionIds.includes(id))
+      prev.filter((id) => !effectiveHiddenOptionIds.includes(id))
     );
-  }, [spotlight.hiddenOptionIds]);
+  }, [effectiveHiddenOptionIds]);
 
   // Apply Insider 50/50 hints cleanly across match, classify, and order
   useEffect(() => {
-    if (spotlight.revealedPairIds.length === 0) return;
+    if (effectiveRevealedPairIds.length === 0) return;
     if (lot.questionType === "match") {
       setPairs((prev) => {
         const next = { ...prev };
-        for (const lid of spotlight.revealedPairIds) {
+        for (const lid of effectiveRevealedPairIds) {
           next[lid] = lot.correctPairs[lid];
         }
         return next;
@@ -87,13 +92,13 @@ export function QuestionConstructor({
     } else if (lot.questionType === "classify") {
       setBuckets((prev) => {
         const next = { ...prev };
-        for (const iid of spotlight.revealedPairIds) {
+        for (const iid of effectiveRevealedPairIds) {
           next[iid] = lot.correctBuckets[iid];
         }
         return next;
       });
     } else if (lot.questionType === "order") {
-      const lockedPrefix = spotlight.revealedPairIds.filter((id) =>
+      const lockedPrefix = effectiveRevealedPairIds.filter((id) =>
         lot.items.some((i) => i.id === id)
       );
       setOrderedIds((prev) => {
@@ -101,18 +106,20 @@ export function QuestionConstructor({
         return [...lockedPrefix, ...rest];
       });
     }
-  }, [spotlight.revealedPairIds, lot]);
+  }, [effectiveRevealedPairIds, lot]);
 
-  const votesList = useMemo(
-    () =>
-      Object.entries(spotlight.analystVotes).map(([pid, ans]) => ({
+  const votesList = useMemo(() => {
+    if (isPersonal) return [];
+    const teamPlayerMap = new Map(teamPlayers.map((p) => [p.id, p]));
+    return Object.entries(spotlight.analystVotes)
+      .filter(([pid]) => teamPlayerMap.has(pid))
+      .map(([pid, ans]) => ({
         playerId: pid,
-        playerName: teamPlayers.find((p) => p.id === pid)?.name ?? "Учасник",
-        isAnalyst: teamPlayers.find((p) => p.id === pid)?.role !== "captain",
+        playerName: teamPlayerMap.get(pid)?.name ?? "Учасник",
+        isAnalyst: teamPlayerMap.get(pid)?.role !== "captain",
         answer: ans,
-      })),
-    [spotlight.analystVotes, teamPlayers]
-  );
+      }));
+  }, [spotlight.analystVotes, teamPlayers, isPersonal]);
 
   const optionVoteCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -158,13 +165,13 @@ export function QuestionConstructor({
 
   const currentPayload: AnswerPayload | null = useMemo(() => {
     if (lot.questionType === "single") {
-      return singleId && !spotlight.hiddenOptionIds.includes(singleId)
+      return singleId && !effectiveHiddenOptionIds.includes(singleId)
         ? { type: "single", optionId: singleId }
         : null;
     }
     if (lot.questionType === "multi") {
       const clean = multiIds.filter(
-        (id) => !spotlight.hiddenOptionIds.includes(id)
+        (id) => !effectiveHiddenOptionIds.includes(id)
       );
       return clean.length === lot.requiredCount
         ? { type: "multi", optionIds: clean }
@@ -194,20 +201,20 @@ export function QuestionConstructor({
     orderedIds,
     pairs,
     buckets,
-    spotlight.hiddenOptionIds,
+    effectiveHiddenOptionIds,
   ]);
 
   const applyAnswerDraft = (p: AnswerPayload) => {
-    if (p.type === "single" && !spotlight.hiddenOptionIds.includes(p.optionId)) {
+    if (p.type === "single" && !effectiveHiddenOptionIds.includes(p.optionId)) {
       setSingleId(p.optionId);
     }
     if (p.type === "multi") {
       setMultiIds(
-        p.optionIds.filter((id) => !spotlight.hiddenOptionIds.includes(id))
+        p.optionIds.filter((id) => !effectiveHiddenOptionIds.includes(id))
       );
     }
     if (p.type === "order" && lot.questionType === "order") {
-      const lockedPrefix = spotlight.revealedPairIds.filter((id) =>
+      const lockedPrefix = effectiveRevealedPairIds.filter((id) =>
         lot.items.some((i) => i.id === id)
       );
       const rest = p.orderedIds.filter((id) => !lockedPrefix.includes(id));
@@ -215,14 +222,14 @@ export function QuestionConstructor({
     }
     if (p.type === "match" && lot.questionType === "match") {
       const merged = { ...p.pairs };
-      for (const lid of spotlight.revealedPairIds) {
+      for (const lid of effectiveRevealedPairIds) {
         merged[lid] = lot.correctPairs[lid];
       }
       setPairs(merged);
     }
     if (p.type === "classify" && lot.questionType === "classify") {
       const merged = { ...p.buckets };
-      for (const iid of spotlight.revealedPairIds) {
+      for (const iid of effectiveRevealedPairIds) {
         merged[iid] = lot.correctBuckets[iid];
       }
       setBuckets(merged);
@@ -261,36 +268,53 @@ export function QuestionConstructor({
 
   return (
     <div className="space-y-4">
-      {/* Team recommendation bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3.5 py-2.5 text-xs text-[#5E4636]">
-        <span className="inline-flex items-center gap-1.5 font-medium">
-          <Users className="h-4 w-4 text-orange-700" />
-          Голосів у команді:{" "}
-          <strong className="font-mono-num text-[#231710]">
-            {votesList.length}
-          </strong>
-        </span>
-        {isCaptain && votesList.length > 0 && (
-          <button
-            type="button"
-            onClick={applyMajorityVote}
-            className="btn-press min-h-[34px] rounded-lg border border-orange-300 bg-white px-3 py-1 text-xs font-bold text-orange-900 hover:bg-orange-100"
-          >
-            Взяти вибір більшості
-          </button>
-        )}
-        {!isCaptain && myExistingVote && (
-          <span className="inline-flex items-center gap-1 font-semibold text-emerald-800">
-            <Check className="h-3.5 w-3.5" /> Рекомендацію надіслано
+      {/* Top vote status bar */}
+      {isPersonal ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3.5 py-2.5 text-xs text-[#5E4636]">
+          <span className="font-semibold text-orange-950">
+            Ваш особистий голос (фіксується у відомості викладача)
           </span>
-        )}
-      </div>
+          {myExistingVote ? (
+            <span className="inline-flex items-center gap-1 font-bold text-emerald-800">
+              <Check className="h-3.5 w-3.5" /> Зараховано до журналу
+            </span>
+          ) : (
+            <span className="font-semibold text-orange-800">
+              Оберіть відповідь нижче
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3.5 py-2.5 text-xs text-[#5E4636]">
+          <span className="inline-flex items-center gap-1.5 font-medium">
+            <Users className="h-4 w-4 text-orange-700" />
+            Голосів у команді:{" "}
+            <strong className="font-mono-num text-[#231710]">
+              {votesList.length}
+            </strong>
+          </span>
+          {isCaptain && votesList.length > 0 && (
+            <button
+              type="button"
+              onClick={applyMajorityVote}
+              className="btn-press min-h-[34px] rounded-lg border border-orange-300 bg-white px-3 py-1 text-xs font-bold text-orange-900 hover:bg-orange-100"
+            >
+              Взяти вибір більшості
+            </button>
+          )}
+          {!isCaptain && myExistingVote && (
+            <span className="inline-flex items-center gap-1 font-semibold text-emerald-800">
+              <Check className="h-3.5 w-3.5" /> Рекомендацію надіслано
+            </span>
+          )}
+        </div>
+      )}
 
       {/* 1. SINGLE CHOICE */}
       {lot.questionType === "single" && (
         <div className="space-y-2.5">
           {lot.options.map((opt) => {
-            const hidden = spotlight.hiddenOptionIds.includes(opt.id);
+            const hidden = effectiveHiddenOptionIds.includes(opt.id);
             const selected = singleId === opt.id;
             const votes = optionVoteCounts[opt.id] ?? 0;
             return (
@@ -341,7 +365,7 @@ export function QuestionConstructor({
             {lot.requiredCount})
           </div>
           {lot.options.map((opt) => {
-            const hidden = spotlight.hiddenOptionIds.includes(opt.id);
+            const hidden = effectiveHiddenOptionIds.includes(opt.id);
             const selected = multiIds.includes(opt.id);
             const votes = optionVoteCounts[opt.id] ?? 0;
             return (
@@ -438,11 +462,11 @@ export function QuestionConstructor({
           {orderedIds.map((id, idx) => {
             const item = lot.items.find((i) => i.id === id);
             if (!item) return null;
-            const lockedPrefixCount = spotlight.revealedPairIds.filter((rid) =>
+            const lockedPrefixCount = effectiveRevealedPairIds.filter((rid) =>
               lot.items.some((i) => i.id === rid)
             ).length;
             const isHinted =
-              spotlight.revealedPairIds.includes(id) &&
+              effectiveRevealedPairIds.includes(id) &&
               idx < lockedPrefixCount &&
               lot.correctOrder[idx] === id;
             const isDraggingThis = draggedOrderId === id;
@@ -622,7 +646,7 @@ export function QuestionConstructor({
             </div>
           )}
           {lot.leftItems.map((left) => {
-            const lockedHint = spotlight.revealedPairIds.includes(left.id);
+            const lockedHint = effectiveRevealedPairIds.includes(left.id);
             const selectedRight = pairs[left.id] ?? "";
             const isDup =
               Boolean(selectedRight) && matchDuplicateValues.has(selectedRight);
@@ -702,7 +726,7 @@ export function QuestionConstructor({
       {lot.questionType === "classify" && (
         <div className="space-y-3">
           {lot.items.map((item) => {
-            const lockedHint = spotlight.revealedPairIds.includes(item.id);
+            const lockedHint = effectiveRevealedPairIds.includes(item.id);
             const currentBucket = buckets[item.id];
             const itemVotes = classifyVoteCounts[item.id] ?? {};
             return (
@@ -799,7 +823,23 @@ export function QuestionConstructor({
         </div>
       )}
 
-      {isCaptain ? (
+      {isPersonal ? (
+        <button
+          type="button"
+          disabled={!currentPayload || busy}
+          onClick={() => currentPayload && onVote(currentPayload)}
+          className={`btn-press flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-extrabold shadow-sm disabled:cursor-not-allowed disabled:opacity-40 ${
+            myExistingVote
+              ? "border border-emerald-400 bg-emerald-600 text-white hover:bg-emerald-700"
+              : "bg-orange-700 text-white hover:bg-orange-800"
+          }`}
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          {myExistingVote
+            ? "Оновити мій голос (у журналі ✓)"
+            : "Зафіксувати мій голос"}
+        </button>
+      ) : isCaptain ? (
         <button
           type="button"
           disabled={!currentPayload || busy}

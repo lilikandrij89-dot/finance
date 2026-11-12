@@ -53,7 +53,7 @@ const PHASE_LABELS: Record<GamePhase, string> = {
 
 export default function ProjectorPage() {
   const roomId = useRoomId();
-  const { state, connected, mode, clockOffsetMs } = useGameRoom(roomId);
+  const { state, connected, clockOffsetMs } = useGameRoom(roomId);
   const { totalSeconds, isPaused } = useCountdown(
     state?.spotlight ?? null,
     clockOffsetMs
@@ -190,7 +190,7 @@ export default function ProjectorPage() {
             }`}
           >
             <Radio className="h-3.5 w-3.5" />
-            {connected ? (mode === "supabase" ? "Live" : "LAN Live") : "Офлайн"}
+            {connected ? "Онлайн" : "Офлайн"}
           </span>
         </div>
       </header>
@@ -213,7 +213,10 @@ export default function ProjectorPage() {
                 <div className="min-w-0 flex-1 space-y-3">
                   <div className="inline-flex items-center gap-2 rounded-full border border-orange-300 bg-orange-100 px-3.5 py-1 text-xs font-bold text-orange-900">
                     <Smartphone className="h-3.5 w-3.5" />
-                    <span>Відкрийте /play на смартфонах · Кімната: {roomId}</span>
+                    <span>
+                      Підключайтесь зі смартфонів
+                      {roomId !== "default-room" ? ` · Кімната: ${roomId}` : ""}
+                    </span>
                   </div>
                   <h2 className="font-display text-3xl font-bold text-[#231710] lg:text-4xl">
                     Збираємо гравців у команди

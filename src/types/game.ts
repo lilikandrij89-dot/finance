@@ -208,6 +208,22 @@ export interface HistoryRecord {
   summary: string;
 }
 
+export interface StudentVoteRecord {
+  playerId: string;
+  playerName: string;
+  teamId: TeamId;
+  lotId: string;
+  ticker: string;
+  round: RoundNumber;
+  topic: TopicCode;
+  answerSummary: string;
+  isExact: boolean;
+  isPartial: boolean;
+  correctCount: number;
+  totalCount: number;
+  timestamp: number;
+}
+
 export interface GameState {
   roomId: string;
   version: number;
@@ -230,6 +246,7 @@ export interface GameState {
   spotlight: SpotlightState | null;
   roulette: RouletteState;
   history: HistoryRecord[];
+  studentResponses?: Record<string, Record<string, StudentVoteRecord>>;
   lastAnnouncement: string | null;
 }
 

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { MARKET_LOTS } from "@/data/question-bank";
-import { generateCsvReport } from "@/lib/formatters";
+import {
+  generateCsvReport,
+  generateStudentCsvReport,
+  generateStudentTsvTable,
+  getStudentSummaryRows,
+} from "@/lib/formatters";
 import {
   applyGameAction,
   canAdvanceToRound,
@@ -756,5 +761,102 @@ describe("Question Bank & Game Engine", () => {
     expect(longQr.size).toBeGreaterThanOrEqual(33);
     const path = qrMatrixToSvgPath(longQr.modules);
     expect(path.startsWith("M")).toBe(true);
+  });
+
+  it("records individual votes from buyer-team students into studentResponses and exports student CSV/TSV tables", () => {
+    let state = createInitialGameState("test-room");
+    state = applyGameAction(state, {
+      type: "JOIN_PLAYER",
+      playerId: "p1",
+      name: "Капітан1",
+      teamId: "team-1",
+    });
+    state = applyGameAction(state, {
+      type: "JOIN_PLAYER",
+      playerId: "p2",
+      name: "Аналітик1",
+      teamId: "team-1",
+      wantCaptain: false,
+    });
+    state = applyGameAction(state, {
+      type: "JOIN_PLAYER",
+      playerId: "p3",
+      name: "Капітан2",
+      teamId: "team-2",
+    });
+    state = applyGameAction(state, { type: "START_GAME" });
+
+    // Team-1 buys single-choice lot-1-1
+    const lot11 = MARKET_LOTS.find((l) => l.id === "lot-1-1")!;
+    const correctAns = getOfficialPayload(lot11);
+    const wrongAns: AnswerPayload =
+      lot11.questionType === "single"
+        ? {
+            type: "single",
+            optionId: lot11.options.find((o) => o.id !== lot11.correctOptionId)!.id,
+          }
+        : correctAns;
+
+    state = applyGameAction(state, {
+      type: "BUY_LOT",
+      teamId: "team-1",
+      lotId: "lot-1-1",
+    });
+
+    // Rival p3 cannot vote on team-1's bought lot (bets on derivatives instead)
+    const afterRivalVote = applyGameAction(state, {
+      type: "VOTE_ANSWER",
+      playerId: "p3",
+      answer: wrongAns,
+    });
+    expect(afterRivalVote).toBe(state);
+
+    // Inside buyer team-1: Analyst votes wrong, Captain submits correct
+    state = applyGameAction(state, {
+      type: "VOTE_ANSWER",
+      playerId: "p2",
+      answer: wrongAns,
+    });
+    state = applyGameAction(state, {
+      type: "SUBMIT_ANSWER",
+      teamId: "team-1",
+      answer: correctAns,
+    });
+    expect(state.spotlight?.isCorrect).toBe(true);
+
+    // Next turn, team-2 buys lot-1-2 and p3 submits right
+    state = applyGameAction(state, { type: "NEXT_AFTER_REVEAL" });
+    const lot12 = MARKET_LOTS.find((l) => l.id === "lot-1-2")!;
+    state = applyGameAction(state, {
+      type: "BUY_LOT",
+      teamId: "team-2",
+      lotId: "lot-1-2",
+    });
+    state = applyGameAction(state, {
+      type: "SUBMIT_ANSWER",
+      teamId: "team-2",
+      answer: getOfficialPayload(lot12),
+    });
+
+    const summary = getStudentSummaryRows(state);
+    const s1 = summary.find((s) => s.playerId === "p1")!;
+    const s2 = summary.find((s) => s.playerId === "p2")!;
+    const s3 = summary.find((s) => s.playerId === "p3")!;
+    expect(s1.exactCount).toBe(1);
+    expect(s1.accuracyPct).toBe(100);
+    expect(s2.votedCount).toBe(1);
+    expect(s2.wrongCount).toBe(1);
+    expect(s2.accuracyPct).toBe(0);
+    expect(s3.votedCount).toBe(1);
+    expect(s3.exactCount).toBe(1);
+
+    const tsv = generateStudentTsvTable(state);
+    expect(tsv).toContain("Студент\tКоманда");
+    expect(tsv).toContain("Аналітик1");
+    expect(tsv).toContain("T-101");
+
+    const csv = generateStudentCsvReport(state);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    expect(csv).toContain("Капітан2");
   });
 });

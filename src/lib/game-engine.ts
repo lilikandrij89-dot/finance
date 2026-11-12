@@ -17,6 +17,7 @@ import {
   Player,
   RoundNumber,
   SettlementEntry,
+  StudentVoteRecord,
   TeamId,
   TeamState,
 } from "@/types/game";
@@ -119,6 +120,7 @@ export function createInitialGameState(roomId = "default-room"): GameState {
       effectLog: null,
     },
     history: [],
+    studentResponses: {},
     lastAnnouncement: null,
   };
 }
@@ -199,6 +201,70 @@ export function evaluateAnswerBreakdown(
 
 export function evaluateAnswer(lot: MarketLot, answer: AnswerPayload): boolean {
   return evaluateAnswerBreakdown(lot, answer).isExact;
+}
+
+export function formatAnswerSummary(lot: MarketLot, ans: AnswerPayload): string {
+  if (ans.type === "single" && lot.questionType === "single") {
+    const opt = lot.options.find((o) => o.id === ans.optionId);
+    return opt ? `Варіант ${opt.label}` : ans.optionId;
+  }
+  if (ans.type === "multi" && lot.questionType === "multi") {
+    return ans.optionIds
+      .map((id) => lot.options.find((o) => o.id === id)?.label ?? id)
+      .sort()
+      .join(", ");
+  }
+  if (ans.type === "order" && lot.questionType === "order") {
+    return ans.orderedIds
+      .map((id) => lot.items.find((i) => i.id === id)?.label ?? id)
+      .join(" → ");
+  }
+  if (ans.type === "match" && lot.questionType === "match") {
+    return lot.leftItems
+      .map((l) => {
+        const ro = lot.rightOptions.find((r) => r.id === ans.pairs[l.id]);
+        return `${l.label}-${ro?.label ?? "?"}`;
+      })
+      .join(", ");
+  }
+  if (ans.type === "classify" && lot.questionType === "classify") {
+    return lot.items
+      .map((item) => {
+        const b = lot.buckets.find((bk) => bk.id === ans.buckets[item.id]);
+        return `${item.label}:${b ? b.title.slice(0, 4) : "?"}`;
+      })
+      .join(" ");
+  }
+  if (ans.type === "open") {
+    return "Усна відповідь";
+  }
+  return "Обрано";
+}
+
+function buildStudentVoteRecord(
+  player: Player,
+  lot: MarketLot,
+  answer: AnswerPayload,
+  now: number
+): StudentVoteRecord {
+  const breakdown = evaluateAnswerBreakdown(lot, answer);
+  const isPartial =
+    !breakdown.isExact && breakdown.totalCount > 1 && breakdown.ratio > 0.5;
+  return {
+    playerId: player.id,
+    playerName: player.name,
+    teamId: player.teamId,
+    lotId: lot.id,
+    ticker: lot.ticker,
+    round: lot.round,
+    topic: lot.topic,
+    answerSummary: formatAnswerSummary(lot, answer),
+    isExact: breakdown.isExact,
+    isPartial,
+    correctCount: breakdown.correctCount,
+    totalCount: breakdown.totalCount,
+    timestamp: now,
+  };
 }
 
 function applySanationIfNeeded(team: TeamState): boolean {
@@ -890,6 +956,12 @@ export function applyGameAction(
       if (state.phase !== "spotlight" || !state.spotlight) return state;
       const player = state.players[action.playerId];
       if (!player || player.teamId !== state.spotlight.buyerTeamId) return state;
+      const lot = getLotById(state.spotlight.lotId);
+      if (!lot || lot.questionType === "open") return state;
+
+      const record = buildStudentVoteRecord(player, lot, action.answer, now);
+      const prevPlayerMap = state.studentResponses?.[player.id] ?? {};
+
       return {
         ...state,
         version: state.version + 1,
@@ -901,6 +973,13 @@ export function applyGameAction(
             [action.playerId]: action.answer,
           },
         },
+        studentResponses: {
+          ...(state.studentResponses ?? {}),
+          [player.id]: {
+            ...prevPlayerMap,
+            [lot.id]: record,
+          },
+        },
       };
     }
 
@@ -908,7 +987,42 @@ export function applyGameAction(
       if (state.phase !== "spotlight" || !state.spotlight) return state;
       if (state.spotlight.buyerTeamId !== action.teamId) return state;
       if (state.spotlight.submittedAnswer !== null) return state;
-      return submitOrStageReview(state, action.answer, now);
+
+      const lot = getLotById(state.spotlight.lotId);
+      let nextState = state;
+      if (lot && lot.questionType !== "open") {
+        const captain = Object.values(state.players).find(
+          (p) => p.teamId === action.teamId && p.role === "captain"
+        );
+        if (captain) {
+          const capRecord = buildStudentVoteRecord(
+            captain,
+            lot,
+            action.answer,
+            now
+          );
+          const prevCapMap = state.studentResponses?.[captain.id] ?? {};
+          nextState = {
+            ...state,
+            spotlight: {
+              ...state.spotlight,
+              analystVotes: {
+                ...state.spotlight.analystVotes,
+                [captain.id]:
+                  state.spotlight.analystVotes[captain.id] ?? action.answer,
+              },
+            },
+            studentResponses: {
+              ...(state.studentResponses ?? {}),
+              [captain.id]: {
+                ...prevCapMap,
+                [lot.id]: capRecord,
+              },
+            },
+          };
+        }
+      }
+      return submitOrStageReview(nextState, action.answer, now);
     }
 
     case "USE_POWERUP": {
@@ -1106,7 +1220,13 @@ export function applyGameAction(
 
     case "FORCE_REVEAL": {
       if (state.phase !== "spotlight" || !state.spotlight) return state;
-      const fallback = getMajorityAnalystAnswer(state.spotlight.analystVotes);
+      const buyerVotes: Record<string, AnswerPayload> = {};
+      for (const [pid, ans] of Object.entries(state.spotlight.analystVotes)) {
+        if (state.players[pid]?.teamId === state.spotlight.buyerTeamId) {
+          buyerVotes[pid] = ans;
+        }
+      }
+      const fallback = getMajorityAnalystAnswer(buyerVotes);
       return submitOrStageReview(state, fallback, now);
     }
 

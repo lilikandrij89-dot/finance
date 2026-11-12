@@ -1005,6 +1005,29 @@ export default function PlayPage() {
                 {spotlightLot.teacherExplanation}
               </p>
             </div>
+            {spotlightLot.questionType !== "open" &&
+              (() => {
+                const myPersonal =
+                  state.studentResponses?.[currentPlayer.id]?.[spotlightLot.id];
+                if (!myPersonal) return null;
+                return (
+                  <div
+                    className={`rounded-2xl border px-3.5 py-2.5 text-xs font-bold ${
+                      myPersonal.isExact
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                        : myPersonal.isPartial
+                        ? "border-amber-300 bg-amber-50 text-amber-900"
+                        : "border-rose-300 bg-rose-50 text-rose-900"
+                    }`}
+                  >
+                    {myPersonal.isExact
+                      ? `✓ Ваш особистий голос вірний: ${myPersonal.answerSummary}`
+                      : myPersonal.isPartial
+                      ? `~ Ваш голос частково вірний (${myPersonal.correctCount}/${myPersonal.totalCount}): ${myPersonal.answerSummary}`
+                      : `✕ Ваш особистий голос помилковий: ${myPersonal.answerSummary}`}
+                  </div>
+                );
+              })()}
             <div className="space-y-1.5">
               {state.spotlight.settlements.map((s) => (
                 <div

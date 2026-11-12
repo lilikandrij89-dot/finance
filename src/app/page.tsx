@@ -58,7 +58,7 @@ export default function HomePage() {
             href="/projector"
             className="btn-press mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-orange-300 bg-orange-50 px-4 py-2.5 text-sm font-bold text-orange-900 hover:bg-orange-100"
           >
-            Відкрити /projector
+            Відкрити проєктор
           </Link>
         </section>
 
@@ -81,7 +81,7 @@ export default function HomePage() {
               href="/play"
               className="btn-press inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-orange-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-orange-800"
             >
-              Увійти в /play
+              Увійти в гру
             </Link>
             <button
               type="button"
@@ -119,7 +119,7 @@ export default function HomePage() {
             href="/admin"
             className="btn-press mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-orange-300 bg-orange-50 px-4 py-2.5 text-sm font-bold text-orange-900 hover:bg-orange-100"
           >
-            Відкрити /admin
+            Відкрити пульт
           </Link>
         </section>
       </div>
@@ -132,21 +132,18 @@ export default function HomePage() {
         <div className="grid gap-4 text-sm text-[#5E4636] sm:grid-cols-3">
           <div>
             <strong className="text-orange-900">1. Підключіть екрани:</strong>{" "}
-            відкрийте <code className="font-mono-num">/projector</code> на
-            екрані аудиторії та <code className="font-mono-num">/admin</code> на
-            ноутбуці викладача.
+            відкрийте «Екран проєктора» на дошці аудиторії та «Пульт викладача»
+            на своєму ноутбуці.
           </div>
           <div>
             <strong className="text-orange-900">2. Зберіть команди:</strong>{" "}
-            роздайте студентам посилання на{" "}
-            <code className="font-mono-num">/play</code> — порожні команди без
-            гравців автоматично не беруть участі.
+            покажіть QR-код на проєкторі або надішліть посилання студентам —
+            порожні команди без гравців автоматично не беруть участі.
           </div>
           <div>
             <strong className="text-orange-900">3. Ведіть торги:</strong>{" "}
-            натискайте головну кнопку в{" "}
-            <code className="font-mono-num">/admin</code>, коментуйте результати
-            за шпаргалкою та запускайте рулетку між раундами.
+            керуйте етапами в пульті викладача, коментуйте результати за
+            шпаргалкою та запускайте рулетку між раундами.
           </div>
         </div>
       </section>
