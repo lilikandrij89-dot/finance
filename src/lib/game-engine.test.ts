@@ -15,7 +15,12 @@ import {
   getNetWorth,
   getRemainingLotsInRound,
 } from "@/lib/game-engine";
-import { generateQrMatrix, qrMatrixToSvgPath } from "@/lib/qr-svg";
+import {
+  buildPlayJoinUrl,
+  generateQrMatrix,
+  PUBLIC_APP_URL,
+  qrMatrixToSvgPath,
+} from "@/lib/qr-svg";
 import { AnswerPayload, GameState, MarketLot } from "@/types/game";
 
 function getOfficialPayload(lot: MarketLot): AnswerPayload {
@@ -761,6 +766,15 @@ describe("Question Bank & Game Engine", () => {
     expect(longQr.size).toBeGreaterThanOrEqual(33);
     const path = qrMatrixToSvgPath(longQr.modules);
     expect(path.startsWith("M")).toBe(true);
+
+    expect(buildPlayJoinUrl("default-room")).toBe(`${PUBLIC_APP_URL}/play`);
+    expect(buildPlayJoinUrl("fin-202")).toBe(
+      `${PUBLIC_APP_URL}/play?roomId=fin-202`
+    );
+    const prodQr = generateQrMatrix(buildPlayJoinUrl("default-room"));
+    expect(prodQr.size).toBeGreaterThanOrEqual(29);
+    expect(prodQr.modules[0][0]).toBe(true);
+    expect(prodQr.modules[prodQr.size - 8][8]).toBe(true);
   });
 
   it("records individual votes from buyer-team students into studentResponses and exports student CSV/TSV tables", () => {

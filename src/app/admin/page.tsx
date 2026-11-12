@@ -53,6 +53,8 @@ import {
   getNetWorth,
   getRemainingLotsInRound,
 } from "@/lib/game-engine";
+import { buildPlayJoinUrl, PUBLIC_APP_URL } from "@/lib/qr-svg";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { AnswerPayload, MarketLot, RoundNumber, TopicCode } from "@/types/game";
 
 function formatReadableVote(lot: MarketLot, ans: AnswerPayload): string {
@@ -314,11 +316,10 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={async () => {
-              const path =
-                roomId !== "default-room"
-                  ? `/play?roomId=${encodeURIComponent(roomId)}`
-                  : "/play";
-              const full = `${window.location.origin}${path}`;
+              const full = buildPlayJoinUrl(
+                roomId,
+                isSupabaseConfigured() ? PUBLIC_APP_URL : window.location.origin
+              );
               try {
                 await navigator.clipboard.writeText(full);
                 setCopiedInvite(true);

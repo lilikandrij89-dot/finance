@@ -10,12 +10,17 @@ import {
   Smartphone,
   TrendingUp,
 } from "lucide-react";
+import { buildPlayJoinUrl, PUBLIC_APP_URL } from "@/lib/qr-svg";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 export default function HomePage() {
   const [copied, setCopied] = useState(false);
 
   const copyPlayLink = () => {
-    const url = `${window.location.origin}/play`;
+    const url = buildPlayJoinUrl(
+      "default-room",
+      isSupabaseConfigured() ? PUBLIC_APP_URL : window.location.origin
+    );
     navigator.clipboard?.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

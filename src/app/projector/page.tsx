@@ -36,7 +36,13 @@ import {
   getRiskTierMeta,
 } from "@/lib/formatters";
 import { getNetWorth } from "@/lib/game-engine";
-import { generateQrMatrix, qrMatrixToSvgPath } from "@/lib/qr-svg";
+import {
+  buildPlayJoinUrl,
+  generateQrMatrix,
+  PUBLIC_APP_URL,
+  qrMatrixToSvgPath,
+} from "@/lib/qr-svg";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { GamePhase } from "@/types/game";
 
 const PHASE_LABELS: Record<GamePhase, string> = {
@@ -59,19 +65,18 @@ export default function ProjectorPage() {
     clockOffsetMs
   );
   const celebratedRef = useRef<string | null>(null);
-  const [joinOrigin, setJoinOrigin] = useState<string>("");
+  const [joinOrigin, setJoinOrigin] = useState<string>(PUBLIC_APP_URL);
 
   useEffect(() => {
-    setJoinOrigin(window.location.origin);
+    if (!isSupabaseConfigured()) {
+      setJoinOrigin(window.location.origin);
+    }
   }, []);
 
-  const joinUrl = useMemo(() => {
-    const path =
-      roomId !== "default-room"
-        ? `/play?roomId=${encodeURIComponent(roomId)}`
-        : "/play";
-    return joinOrigin ? `${joinOrigin}${path}` : path;
-  }, [joinOrigin, roomId]);
+  const joinUrl = useMemo(
+    () => buildPlayJoinUrl(roomId, joinOrigin),
+    [joinOrigin, roomId]
+  );
 
   const qrMatrix = useMemo(() => generateQrMatrix(joinUrl), [joinUrl]);
   const qrPath = useMemo(() => qrMatrixToSvgPath(qrMatrix.modules), [qrMatrix]);
@@ -229,30 +234,35 @@ export default function ProjectorPage() {
                     . Порожні команди без підключених гравців не беруть участі
                     в торгах.
                   </p>
-                  <div className="inline-block max-w-full truncate rounded-xl border border-orange-200 bg-orange-50/80 px-3 py-1.5 font-mono-num text-xs font-bold text-orange-950">
+                  <a
+                    href={joinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block max-w-full break-all rounded-xl border border-orange-200 bg-orange-50/80 px-3.5 py-2 font-mono-num text-sm font-bold text-orange-950 underline decoration-orange-300 underline-offset-4 transition hover:bg-orange-100"
+                  >
                     {joinUrl}
-                  </div>
+                  </a>
                 </div>
-                <div className="flex shrink-0 flex-col items-center gap-2 rounded-2xl border border-orange-200 bg-white p-3.5 shadow-sm">
+                <div className="flex shrink-0 flex-col items-center gap-2.5 rounded-2xl border-2 border-orange-200 bg-white p-4 shadow-md">
                   <svg
-                    viewBox={`0 0 ${qrMatrix.size + 4} ${qrMatrix.size + 4}`}
-                    className="h-36 w-36"
+                    viewBox={`0 0 ${qrMatrix.size + 8} ${qrMatrix.size + 8}`}
+                    className="h-52 w-52 sm:h-56 sm:w-56"
                     shapeRendering="crispEdges"
                     role="img"
-                    aria-label={`QR-код для входу до кімнати ${roomId}`}
+                    aria-label={`QR-код для входу до гри (${joinUrl})`}
                   >
                     <rect
                       x={0}
                       y={0}
-                      width={qrMatrix.size + 4}
-                      height={qrMatrix.size + 4}
+                      width={qrMatrix.size + 8}
+                      height={qrMatrix.size + 8}
                       fill="#ffffff"
                     />
-                    <g transform="translate(2,2)">
-                      <path d={qrPath} fill="#231710" />
+                    <g transform="translate(4,4)">
+                      <path d={qrPath} fill="#000000" />
                     </g>
                   </svg>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#5E4636]">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#231710]">
                     Скануйте камерою
                   </span>
                 </div>
