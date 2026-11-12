@@ -97,9 +97,23 @@ function formatReadableVote(lot: MarketLot, ans: AnswerPayload): string {
 
 export default function AdminPage() {
   const roomId = useRoomId();
-  const requiredPin = process.env.NEXT_PUBLIC_ADMIN_PIN || "";
+  const requiredPin = process.env.NEXT_PUBLIC_ADMIN_PIN?.trim() || "3434";
   const [pinInput, setPinInput] = useState("");
-  const [unlocked, setUnlocked] = useState(!requiredPin);
+  const [pinError, setPinError] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (
+        typeof window !== "undefined" &&
+        window.sessionStorage.getItem("fin-storm-admin-pin") === requiredPin
+      ) {
+        setUnlocked(true);
+      }
+    } catch {
+      // ignore storage failure
+    }
+  }, [requiredPin]);
   const [previewLotId, setPreviewLotId] = useState<string | null>(null);
   const [autoRevealOnZero, setAutoRevealOnZero] = useState<boolean>(true);
   const [copiedInvite, setCopiedInvite] = useState<boolean>(false);
@@ -171,7 +185,20 @@ export default function AdminPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (pinInput === requiredPin) setUnlocked(true);
+            if (pinInput.trim() === requiredPin) {
+              setPinError(false);
+              try {
+                window.sessionStorage.setItem(
+                  "fin-storm-admin-pin",
+                  requiredPin
+                );
+              } catch {
+                // ignore storage failure
+              }
+              setUnlocked(true);
+            } else {
+              setPinError(true);
+            }
           }}
           className="surface-card w-full max-w-sm rounded-3xl p-6"
         >
@@ -183,21 +210,34 @@ export default function AdminPage() {
             htmlFor="admin-pin"
             className="mb-1.5 block text-xs font-bold text-[#5E4636]"
           >
-            PIN-код доступу
+            Пароль доступу
           </label>
           <input
             id="admin-pin"
             type="password"
+            autoFocus
             value={pinInput}
-            onChange={(e) => setPinInput(e.target.value)}
-            placeholder="Введіть PIN-код"
-            className="mb-4 min-h-[44px] w-full rounded-xl border border-orange-300 bg-white px-3.5 py-2 text-base text-[#231710]"
+            onChange={(e) => {
+              setPinInput(e.target.value);
+              if (pinError) setPinError(false);
+            }}
+            placeholder="Введіть пароль"
+            className={`mb-2 min-h-[44px] w-full rounded-xl border bg-white px-3.5 py-2 text-base text-[#231710] outline-none focus:ring-2 ${
+              pinError
+                ? "border-rose-400 focus:ring-rose-200"
+                : "border-orange-300 focus:ring-orange-200"
+            }`}
           />
+          {pinError && (
+            <p className="mb-3 text-xs font-semibold text-rose-700">
+              Невірний пароль. Спробуйте ще раз.
+            </p>
+          )}
           <button
             type="submit"
-            className="btn-press min-h-[44px] w-full rounded-xl bg-orange-700 py-2.5 text-sm font-bold text-white hover:bg-orange-800"
+            className="btn-press mt-2 min-h-[44px] w-full rounded-xl bg-orange-700 py-2.5 text-sm font-bold text-white hover:bg-orange-800"
           >
-            Розблокувати пульт
+            Увійти в пульт
           </button>
         </form>
       </main>
