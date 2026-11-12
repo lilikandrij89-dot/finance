@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+:root {
+  --bg-canvas: #fff8f2;
+  --bg-tint: #ffefe2;
+  --bg-surface: #ffffff;
+  --border-warm: #f3d7c1;
+  --border-strong: #e5b896;
+  --text-primary: #231710;
+  --text-secondary: #5e4636;
+  --text-muted: #826754;
+  --accent-solid: #c2410c;
+  --accent-hover: #9a3412;
+  --accent-soft: #ffedd5;
+}
+
+html {
+  scroll-padding-top: 88px;
+}
+
+html,
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-manrope), system-ui, -apple-system, sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-unbounded), var(--font-manrope), sans-serif;
+}
+
+.font-mono-num {
+  font-family: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.warm-peach-bg {
+  background-color: var(--bg-canvas);
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(251, 146, 60, 0.16), transparent 42%),
+    radial-gradient(circle at 88% 12%, rgba(249, 115, 22, 0.12), transparent 38%),
+    radial-gradient(circle at 50% 95%, rgba(253, 186, 116, 0.14), transparent 45%);
+}
+
+.surface-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-warm);
+  box-shadow:
+    0 1px 2px rgba(154, 52, 18, 0.05),
+    0 10px 28px -8px rgba(194, 65, 12, 0.1);
+}
+
+.surface-tint {
+  background-color: var(--bg-tint);
+  border: 1px solid var(--border-warm);
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent-solid);
+  outline-offset: 2px;
+}
+
+.btn-press {
+  transition-property: transform, background-color, border-color, color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.btn-press:enabled:active {
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
